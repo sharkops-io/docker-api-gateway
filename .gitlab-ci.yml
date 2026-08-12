@@ -1,6 +1,15 @@
 include:
   - project: 'sharkops/gitlab-ci-common-config'
     file: 'docker/build.yml'
+  # Mandatory here, not optional. This repo is PUBLIC, so deleting a credential
+  # from the working tree would not remove it from history - and it is a
+  # security component, where that would be a particularly bad look.
+  #
+  # Lands in `test`. docker/build.yml declares no `stages:` and its job is in
+  # `build`, so GitLab's defaults (.pre, build, test, deploy, .post) apply and
+  # `test` exists. Do not add a `stages:` list here without including `test`.
+  - project: 'sharkops/gitlab-ci-common-config'
+    file: 'security/secret-scan.yml'
 
 variables:
   IMAGE_NAME: $CI_REGISTRY_IMAGE
