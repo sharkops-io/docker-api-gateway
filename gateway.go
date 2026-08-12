@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/subtle"
+	"crypto/tls"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -85,4 +86,25 @@ func New(cfg Config) http.Handler {
 	})
 
 	return mux
+}
+
+// certReloader returns a GetCertificate func that re-reads the key pair from
+// disk on EVERY handshake.
+//
+// This is the whole reason the server does not use ListenAndServeTLS, which
+// reads the pair once at startup: after certbot renews, such a process keeps
+// serving the OLD certificate until something restarts it - serving an expired
+// cert for up to 90 days while every renewal reports success. Re-reading means
+// a renewal takes effect on the next handshake.
+//
+// Re-reading per handshake is affordable here: this gateway serves one client
+// (another-app) with long-lived log streams, not high connection churn.
+func certReloader(certFile, keyFile string) func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	return func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+		c, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return nil, err
+		}
+		return &c, nil
+	}
 }
