@@ -11,7 +11,8 @@ Two endpoints are reachable and nothing else:
 | `GET` | `/containers/{id}/logs` | logs, including `follow=1` streaming |
 
 Plus `GET /healthz`, unauthenticated, which returns `ok` and does **not** touch the
-Docker socket.
+Docker socket. The image also ships a `HEALTHCHECK` that probes it, so
+`docker ps` reports the container healthy or not without any extra wiring.
 
 ## Why an allowlist and not just a token
 
@@ -36,6 +37,22 @@ That property is asserted by tests, not just intended.
 | `-socket` | Docker socket path (default `/var/run/docker.sock`) |
 | `-addr` | listen address (default `:9375`) |
 | `-tls-cert`, `-tls-key` | enable HTTPS; omit both to serve plaintext |
+| `-healthcheck` | probe `/healthz` on the local listener and exit non-zero on failure; what the image's `HEALTHCHECK` runs |
+
+### About the healthcheck
+
+The image is `distroless`, so there is no shell, `curl` or `wget` to write a
+conventional `HEALTHCHECK` against — the binary probes itself instead.
+
+It **detects http-vs-https rather than being told**, because a `HEALTHCHECK`
+process does not inherit the flags the server was started with: `-tls-cert` reaches
+the entrypoint, not the healthcheck command. A probe that assumed plaintext would
+report every TLS deployment unhealthy forever while the gateway answered perfectly
+well. It also sends no token, so rotating `GATEWAY_TOKEN` cannot make a healthy
+container look unhealthy.
+
+A non-default `-addr` is the one case that needs the `HEALTHCHECK` overridden in
+your compose file alongside it.
 
 Without `-tls-cert`/`-tls-key` the bearer token crosses the network in cleartext on
 every request. Only do that on a network you would already trust with the logs.

@@ -3,11 +3,14 @@ package main
 import (
 	"crypto/subtle"
 	"crypto/tls"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"path"
 	"regexp"
+	"time"
 )
 
 // Config is everything New needs. Target and Transport are injectable so tests
@@ -107,4 +110,66 @@ func certReloader(certFile, keyFile string) func(*tls.ClientHelloInfo) (*tls.Cer
 		}
 		return &c, nil
 	}
+}
+
+// probeHealth performs the container healthcheck: a GET of /healthz on the
+// gateway's own listener. It lives in the binary because the image is
+// distroless - there is no shell, no curl and no wget to write a HEALTHCHECK
+// against.
+//
+// It deliberately does NOT send the token. /healthz is unauthenticated, and a
+// probe that authenticated would report the container unhealthy after a token
+// rotation - a configuration change, not a liveness failure.
+//
+// TLS verification is skipped. The server presents a certificate for its public
+// FQDN while the probe dials the loopback from inside the container, so
+// verifying would fail on every TLS deployment forever. This checks that the
+// process is answering, not who it is.
+func probeHealth(addr string, useTLS bool, timeout time.Duration) error {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("cannot parse address %q: %w", addr, err)
+	}
+	// -addr defaults to ":9375", and an empty or wildcard host is not dialable.
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+
+	scheme := "http"
+	client := &http.Client{Timeout: timeout}
+	if useTLS {
+		scheme = "https"
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}, // nosemgrep
+		}
+	}
+
+	resp, err := client.Get(fmt.Sprintf("%s://%s/healthz", scheme, net.JoinHostPort(host, port)))
+	if err != nil {
+		return fmt.Errorf("healthz unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("healthz returned %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// probeHealthAuto is what -healthcheck actually runs. It tries TLS first and
+// then plaintext, because the container HEALTHCHECK cannot know which the
+// server is using: `docker run ... -tls-cert=…` configures the ENTRYPOINT, and
+// none of that reaches `CMD ["/docker-api-gateway", "-healthcheck"]`. Being
+// told the scheme by a flag would mean every TLS deployment silently reported
+// unhealthy while the gateway was answering perfectly well.
+func probeHealthAuto(addr string, timeout time.Duration) error {
+	tlsErr := probeHealth(addr, true, timeout)
+	if tlsErr == nil {
+		return nil
+	}
+	plainErr := probeHealth(addr, false, timeout)
+	if plainErr == nil {
+		return nil
+	}
+	return fmt.Errorf("healthz unreachable over TLS (%v) and plaintext (%v)", tlsErr, plainErr)
 }
