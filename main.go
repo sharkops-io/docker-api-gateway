@@ -17,7 +17,29 @@ func main() {
 	addr := flag.String("addr", ":9375", "listen address")
 	certFile := flag.String("tls-cert", "", "path to the TLS certificate (enables HTTPS)")
 	keyFile := flag.String("tls-key", "", "path to the TLS private key")
+	healthcheck := flag.Bool("healthcheck", false,
+		"probe /healthz on the local listener, print nothing on success, exit non-zero on failure")
 	flag.Parse()
+
+	// The container HEALTHCHECK runs this same binary with -healthcheck. The
+	// image is distroless, so there is no shell, curl or wget to write a
+	// healthcheck against - the binary has to be able to probe itself.
+	//
+	// Checked BEFORE the GATEWAY_TOKEN requirement below: the probe does not
+	// use the token, and failing the healthcheck on a missing env var would
+	// report "unhealthy" for something that would have stopped the container
+	// from starting at all.
+	//
+	// The scheme is detected rather than taken from -tls-cert, because the
+	// HEALTHCHECK process does not inherit the flags the SERVER was started
+	// with - see probeHealthAuto.
+	if *healthcheck {
+		if err := probeHealthAuto(*addr, 5*time.Second); err != nil {
+			log.Printf("healthcheck failed: %v", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	token := os.Getenv("GATEWAY_TOKEN")
 	if token == "" {
