@@ -148,7 +148,7 @@ func probeHealth(addr string, useTLS bool, timeout time.Duration) error {
 	if err != nil {
 		return fmt.Errorf("healthz unreachable: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("healthz returned %d", resp.StatusCode)

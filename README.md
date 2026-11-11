@@ -67,7 +67,7 @@ serving an expired cert for up to 90 days while every renewal reported success.
 ```yaml
 services:
   gateway:
-    image: registry.gitlab.com/sharkops/docker-images/docker-api-gateway:latest
+    image: ghcr.io/sharkops-io/docker-api-gateway:latest
     restart: unless-stopped
     ports:
       - "9375:9375"
@@ -95,3 +95,7 @@ unreachable with a valid token, writes are refused, unknown paths 404, a token t
 is a prefix of the real one fails, a path traversal that normalises onto a blocked
 path does not smuggle through, `/healthz` does not proxy, and a renewed certificate
 is picked up without a restart.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
