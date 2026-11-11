@@ -1,8 +1,11 @@
-FROM golang:1.27-alpine AS build
+# The build stage runs on the BUILDER's architecture and cross-compiles for the
+# target, so a multi-arch build needs no emulation for the Go compile.
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
+ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod ./
 COPY *.go ./
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/docker-api-gateway .
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /out/docker-api-gateway .
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/docker-api-gateway /docker-api-gateway
