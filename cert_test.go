@@ -23,7 +23,7 @@ func writeSelfSigned(t *testing.T, dir string, serial int64) (certPath, keyPath 
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(serial),
-		Subject:      pkix.Name{CommonName: "host1.example.com"},
+		Subject:      pkix.Name{CommonName: "docker.example.com"},
 		NotBefore:    time.Now().Add(-time.Hour),
 		NotAfter:     time.Now().Add(24 * time.Hour),
 	}
