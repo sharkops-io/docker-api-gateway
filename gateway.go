@@ -24,13 +24,15 @@ type Config struct {
 // Exactly two paths are reachable, and the allowlist - not the token - is the
 // security boundary here.
 //
-// GET /containers/{id}/json (inspect) returns Config.Env. On this cluster's
-// palworld container that is 157 variables including SERVER_PASSWORD and
-// ADMIN_PASSWORD. Blocking inspect at the gateway means a LEAKED TOKEN still
-// cannot reach those credentials, which a token check alone would not give us.
+// GET /containers/{id}/json (inspect) returns Config.Env. On the palworld
+// container that motivated this, that is 157 variables including
+// SERVER_PASSWORD and ADMIN_PASSWORD. Blocking inspect at the gateway means a
+// LEAKED TOKEN still cannot reach those credentials, which a token check alone
+// would not give us.
 //
-// GET /containers/json (the list another-app needs for its dashboard card) does
-// not carry Env, which is why the two can be separated at all.
+// GET /containers/json (the list a dashboard consumer needs for a container
+// status card) does not carry Env, which is why the two can be separated at
+// all.
 var logsPath = regexp.MustCompile(`^/containers/[A-Za-z0-9][A-Za-z0-9_.-]*/logs$`)
 
 func allowed(r *http.Request) bool {
@@ -100,8 +102,9 @@ func New(cfg Config) http.Handler {
 // cert for up to 90 days while every renewal reports success. Re-reading means
 // a renewal takes effect on the next handshake.
 //
-// Re-reading per handshake is affordable here: this gateway serves one client
-// (another-app) with long-lived log streams, not high connection churn.
+// Re-reading per handshake is affordable here: the gateway is built for a
+// handful of clients (typically one dashboard consumer) with long-lived log
+// streams, not high connection churn.
 func certReloader(certFile, keyFile string) func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 		c, err := tls.LoadX509KeyPair(certFile, keyFile)
